@@ -5,12 +5,52 @@
 #ifndef EVENTDRIVEN_TASK_QUEUE_SELECT_H
 #define EVENTDRIVEN_TASK_QUEUE_SELECT_H
 
+#include <cstddef>
+#include <memory>
+#include <list>
+#include <mutex>
+#include <thread>
+
 namespace ftdwild {
 
+
+class TaskEntry {
+public:
+    TaskEntry() = default;
+    virtual ~TaskEntry() = default;
+
+    virtual void Run() = 0;
+};
+
+typedef std::list<std::shared_ptr<TaskEntry>> TASK_LIST;
 class TaskQueue {
 public:
     TaskQueue();
     ~TaskQueue();
+
+    int Start();
+
+    void Stop();
+
+    void AddTask(const std::shared_ptr<TaskEntry> &task);
+
+
+private:
+    int makeSocketNonBlock(int fd);
+    void threadEntry();
+    int doTask();
+
+private:
+    int fd_in_;
+    int fd_out_;
+    bool running_;
+    bool start_;
+    std::mutex mutex_;
+    std::thread *thread_;
+    TASK_LIST list_;
+
+private:
+    static const uint32_t kDefaultTaskNum = 256;
 };
 
 
