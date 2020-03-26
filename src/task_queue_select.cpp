@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <chrono>
+
 
 using namespace ftdwild;
 
@@ -19,23 +21,23 @@ TaskQueue::TaskQueue() {
     fd_in_ = 0;
     fd_out_ = 0;
     running_ = false;
-    start_ = false;
     thread_ = nullptr;
+    exit_ = false;
 }
 
 TaskQueue::~TaskQueue() {
-    delete thread_;
+    Stop();
 }
 
-void TaskQueue::AddTask(const std::shared_ptr<TaskEntry> &task) {
+void TaskQueue::AddTask(std::unique_ptr<TaskEntry> task) {
     std::lock_guard<std::mutex> lock(mutex_);
-    list_.push_back(task);
+    list_.push_back(std::move(task));
     send(fd_in_, "t", 1, 0);
 }
 
 int TaskQueue::Start() {
-    if (start_) {
-        return -1;//只允许启动一次，简单处理
+    if (running_) {
+        return 0;//只允许启动一次，简单处理
     }
 
     int sockets[2];
@@ -55,19 +57,32 @@ int TaskQueue::Start() {
     fd_out_ = sockets[1];
 
     running_ = true;
+    exit_ = false;
     thread_ = new std::thread(&TaskQueue::threadEntry, this);
-
-    start_ = true;
+    thread_->detach();
 
     return 0;
 }
 
 void TaskQueue::Stop() {
-    if (!start_) {
+    if (!running_) {
         return;
     }
     running_ = false;
     send(fd_in_, "e", 1, 0);
+
+    while (!exit_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    delete thread_;
+    if (fd_in_) {
+        close(fd_in_);
+        fd_in_ = 0;
+    }
+    if (fd_out_) {
+        close(fd_out_);
+        fd_out_ = 0;
+    }
 }
 
 int TaskQueue::makeSocketNonBlock(int fd) {
@@ -111,6 +126,8 @@ void TaskQueue::threadEntry() {
         }
 
     }
+
+    exit_ = true;
 }
 
 int TaskQueue::doTask() {
@@ -128,7 +145,7 @@ int TaskQueue::doTask() {
     for (i = 0; i < ret; i++) {
         if (buf[i] == 'e') {
             printf("recv exit cmd\n");
-            return -1;
+            return 0;
         }
     }
 
@@ -138,11 +155,12 @@ int TaskQueue::doTask() {
     TASK_LIST new_list;
     i = 0;
     for (; it != list_.end() && i < ret; ) {
-        new_list.push_back(*it);
+        new_list.push_back(std::move(*it));
         list_.erase(it++);
         i++;
     }
     mutex_.unlock();
+
 
     for (auto &it2 : new_list) {
         it2->Run();

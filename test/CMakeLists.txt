@@ -1,5 +1,7 @@
 file(GLOB_RECURSE TEST_FILES ${ROOT}/test/*.cpp)
 
+include_directories(${ROOT}/pre_build/googletest/include
+                    ${ROOT}/src)
 
 message(STATUS "this test file: ${TEST_FILES}")
 

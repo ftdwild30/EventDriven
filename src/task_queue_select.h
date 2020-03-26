@@ -22,7 +22,7 @@ public:
     virtual void Run() = 0;
 };
 
-typedef std::list<std::shared_ptr<TaskEntry>> TASK_LIST;
+typedef std::list<std::unique_ptr<TaskEntry>> TASK_LIST;
 class TaskQueue {
 public:
     TaskQueue();
@@ -32,11 +32,11 @@ public:
 
     void Stop();
 
-    void AddTask(const std::shared_ptr<TaskEntry> &task);
+    void AddTask(std::unique_ptr<TaskEntry> task);
 
 
 private:
-    int makeSocketNonBlock(int fd);
+    static int makeSocketNonBlock(int fd);
     void threadEntry();
     int doTask();
 
@@ -44,7 +44,7 @@ private:
     int fd_in_;
     int fd_out_;
     bool running_;
-    bool start_;
+    bool exit_;
     std::mutex mutex_;
     std::thread *thread_;
     TASK_LIST list_;
